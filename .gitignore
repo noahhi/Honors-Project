@@ -2,3 +2,5 @@ $ Don't track content of these folders
 __pycache__/
 
 gurobi.log
+
+forrester*
