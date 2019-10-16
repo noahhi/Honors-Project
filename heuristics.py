@@ -158,15 +158,18 @@ class LinkedList:
     # count the max number of items that can possibly fit and the sum of the weights of those items
     def init_key_index_and_sum(self, RHS):
         curr = self.head.next
-        self.key_index = 0
+        # n0 is the max number of items which can fit
+        self.n0 = 0
+        # key_sum is the total weight of items 1...n0
         self.key_sum = 0
-        # maintain a pointer to the node at key_index
+        # maintain a pointer to the last node of n0
         self.key_pointer = None
+
         # start by taking lowest weight item, then second lowest, etc.. until no more can fit
         while curr is not None and curr.weight < RHS:
             RHS -= curr.weight
             self.key_sum += curr.weight
-            self.key_index += 1
+            self.n0 += 1
             # TODO more efficient to do this only once after loop finishes loop
             self.key_pointer = curr
             curr = curr.next
@@ -176,7 +179,7 @@ class LinkedList:
     def update_key_set(self, RHS):
         while self.key_sum > RHS:
             self.key_sum -= self.key_pointer.weight
-            self.key_index -= 1
+            self.n0 -= 1
 
 
     # remove the node
@@ -189,6 +192,7 @@ class LinkedList:
                 if curr.next is not None:
                     curr.next.prev = curr.prev
                 curr.prev.next = curr.next
+                break
             else:
                 curr = curr.next
         if not found:
@@ -200,14 +204,19 @@ class LinkedList:
     # TODO use a Tail and start at the end of list
     def remove_too_big(self, RHS):
         curr = self.head
+        count = -1
 
         # look until we find an item which can not fit
         while (curr is not None and curr.weight < RHS):
             curr = curr.next
+            count += 1
+
+        # chopping off an unknown # of items => recount size
+        self.size = count
 
         # all further items are bigger and thus will not fit. So remove them all
         if curr is not None:
-            curr.prev = None
+            curr.prev.next = None
 
     # inserts a new node to maintain a sorted list by weight
     def add_node(self, index, weight):
@@ -241,7 +250,7 @@ class LinkedList:
 '''
 Apply Glover's Advanced constructive Greedy heuristic (with product terms) to a single dimension cubic knapsack
 '''
-def advanced_greedy(cubic, verbose=True):
+def advanced_greedy(cubic, verbose=False):
     n = cubic.n
     c = cubic.c
     C = cubic.C
@@ -270,7 +279,7 @@ def advanced_greedy(cubic, verbose=True):
         print("Initial N0 : ", end="")
         N0.display()
         print(f"Initial RHS: {RHS}")
-        print(f"Key Index : {N0.key_index} items")
+        print(f"Key Index : {N0.n0} items")
         print(f"Key Index : {N0.key_sum}")
 
     # intialize value ratios to zero
@@ -285,7 +294,7 @@ def advanced_greedy(cubic, verbose=True):
             print(f"Max copies : {max_copies}")
 
         # compute the min of max_copies (n_j) and max_items (n_0)
-        n_prime = min(max_copies, N0.key_index)
+        n_prime = min(max_copies, N0.n0)
 
         # initial values deon't consider nonlinear values
         value_ratios[node.index] = n_prime * c[node.index]
@@ -299,6 +308,10 @@ def advanced_greedy(cubic, verbose=True):
         # get the highest value item to include next
         take_index = np.argmax(value_ratios)
 
+        if value_ratios[take_index] == 0:
+            N0.display()
+            take_index = N0.head.next.index
+
         # remove this item from pool of unassigned items
         N0.remove_by_index(take_index)
         value_ratios[take_index] = -1
@@ -311,9 +324,11 @@ def advanced_greedy(cubic, verbose=True):
         N0.remove_too_big(RHS)
 
         # follow fast update procedure from page 8 of Glover's paper on Advanced Greedy Algorithms
-        if take_index <= N0.key_index:
-            N0.key_index -= 1
+        if a[take_index][0] <= N0.key_pointer.weight:
+            N0.n0 -= 1
             N0.key_sum -= a[take_index][0]
+            if N0.key_pointer.index == take_index:
+                N0.key_pointer = N0.key_pointer.prev
         else:
             N0.update_key_set(RHS)
 
@@ -326,7 +341,7 @@ def advanced_greedy(cubic, verbose=True):
             # add linear contribution
             value_ratios[i] += c[i]
 
-            for taken_index in N1
+            for taken_index in N1:
                 # add in new quadratic contributions
                 value_ratios[i] += (C[i, taken_index] + C[taken_index, i])
 
@@ -339,9 +354,14 @@ def advanced_greedy(cubic, verbose=True):
             # compute the max number of copies of x_i which could fit if binary constraint were removed (denoted n_j in the paper)
             max_copies = RHS//node.weight
 
-            n_prime = min(max_copies, N0.key_index)
+            n_prime = min(max_copies, N0.n0)
 
             value_ratios[i] = n_prime * value_ratios[i]
+
+        # if np.count_nonzero(value_ratios) == 0:
+        #     print("No more value to be gained?")
+        #     # TODO there still could be more value to gain
+        #     break
 
         # add item to taken items
         N1.add(take_index)
@@ -351,27 +371,18 @@ def advanced_greedy(cubic, verbose=True):
 
 
 def main():
-    # linked = LinkedList()
-    # linked.display()
-    # linked.add_node(1,5)
-    # linked.display()
-    # linked.add_node(3,3)
-    # linked.display()
-    # linked.add_node(2,8)
-    # linked.display()
-    # linked.remove_by_index(1)
-    # linked.display()
-    # linked.remove_by_index(2)
-    # linked.display()
-    # linked.remove_by_index(3)
-    # linked.display()
-
-    n = 10
+    n = 60
     cdmkp = CMDKP(n=n, density=70, constraints=1)
+
     indices = advanced_greedy(cdmkp)
-    # val = getObjVal(indices, cdmkp.c, cdmkp.C, cdmkp.D)
-    # print(indices)
-    # print(val)
+    val = getObjVal(indices, cdmkp.c, cdmkp.C, cdmkp.D)
+    print(f"advanced_greedy N1: {indices}")
+    print(f"advanced_greedy obj val: {val}")
+
+    indices = naive_greedy(cdmkp)
+    val = getObjVal(indices, cdmkp.c, cdmkp.C, cdmkp.D)
+    print(f"naive_greedy N1: {indices}")
+    print(f"naive_greedy obj val: {val}")
 
 
 if __name__=="__main__":
