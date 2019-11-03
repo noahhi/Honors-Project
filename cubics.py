@@ -1,28 +1,34 @@
+'''
+File for generating instances of Cubic problems
+'''
+
 import numpy as np
 from numpy.random import randint
 
 
-class CMDKP:
+class Cubic:
   '''
-  Used to represent an instance of the Cubic Multidimensional Knapsack Problem
+  Base class for all Cubics
 
   Attributes:
-    n (int): problem size (i.e., the number of variables)
-    density (int): the density of the value coefficients
-    constraints (int): the number of constraints
+  	n (int): problem size/number of decision variables
+  	density (int): density of value coefficients (should be in range [0,100]
+  	c ([int]): linear values
+  	C ([[int]]): quadratic (pair) values
+  	D ([[[int]]]): cubic (triplet) values
   '''
 
-  def __init__(self, n, density, constraints, seed=0):
+  def __init__(self, n, density, seed=0):
     np.random.seed(seed)
 
     self.n = n
     self.density = density
-    self.constraints = constraints
 
     self.c = np.zeros(n)
     self.C = np.zeros((n,n))
     self.D = np.zeros((n,n,n))
 
+    # randomly initialize all value coefficients
     for i in range(n):
       if randint(1, 101) <= density:
         self.c[i] = randint(low=1,high=101)
@@ -33,6 +39,20 @@ class CMDKP:
           if randint(1, 101) <= density:
             self.D[i,j,k] = randint(low=1,high=101)
 
+
+class CMDKP(Cubic):
+  '''
+  Used to represent an instance of the Cubic Multidimensional Knapsack Problem. Subclass of Cubic.
+
+  Additional Attributes:
+    constraints (int): the number of constraints (i.e. dimensions)
+  '''
+
+  def __init__(self, n, density, constraints, seed=0):
+    super().__init__(n=n, density=density, seed=seed)
+
+    self.constraints = constraints
+
     # generate item weights (each item has a weight in each dimension)
     self.a = np.random.randint(low=1, high=51, size=(n,constraints))
 
@@ -42,8 +62,33 @@ class CMDKP:
       self.b[j] = np.random.randint(low=50, high=sum(self.a[i,j] for i in range(n))) #TODO what should lower bound be? 50 -> errors for small n
 
 
+class CMKP(Cubic):
+  '''
+  Used to repesent an instance of the Cubic Multiple Knapsack Problem
+
+  Additional Attributes:
+    m (int): the number of knapsacks
+  '''
+
+  def __init__(self, n, density, m, seed=0):
+    super().__init__(n=n, density=density, seed=seed)
+
+    self.m = m
+
+    # generate item weights
+    self.a = np.random.randint(low=1, high=51, size=n)
+    total_weight = sum(self.a)
+
+    # generate knapsack capacities (one for each knapsack)
+    self.b = np.zeros(m)
+    for j in range(m):
+      # TODO should ub be lower than total weight for multiple knap? maybe dependent on m?
+      self.b[j] = np.random.randint(low=50, high=total_weight)
+
+
 def main():
-    cdmkp = CMDKP(n=4,density=80,constraints=2,seed=1)
+    cdmkp = CMDKP(n=50,density=60,constraints=3)
+    cmkp = CMKP(n=50,density=60,m=3)
 
 
 if __name__=="__main__":

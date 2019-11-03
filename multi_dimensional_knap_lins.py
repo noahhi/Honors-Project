@@ -1,5 +1,10 @@
+'''
+Use linearizations to solve instances of the cubic Multidimensional knapsack to optimality
+'''
+
 from cubics import *
 from gurobipy import *
+
 
 '''
 Apply the Adams and Forrester linearization to an instance of the cubic Multidimensional knapsack and return the model
@@ -91,6 +96,7 @@ def standard_lin(cubic):
     for d in range(constraints):
         model.addLConstr(quicksum(x[i]*a[i][d] for i in range(n)) <= b[d])
 
+    # NOTE assuming upper triangular form
     for i in range(n):
         for j in range(i+1,n):
             model.addLConstr(y[i,j] <= x[i])
@@ -115,6 +121,7 @@ def standard_lin(cubic):
 def main():
     setParam('OutputFlag',0)
     setParam('LogFile',"")
+
 
     # generate instance of CMDKP
     n = 15
