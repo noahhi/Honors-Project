@@ -1,26 +1,40 @@
+'''
+Heuristic Algorithms for solving cubic knapsack problems
+'''
+
 from cubics import *
 
+
 '''
-Given a set of variable indices, and the objective coefficients, compute the objective function value.
-(Assume solution is feasible)
+Given a set N1 of taken items, and the objective coefficients, compute the objective function value.
+(assumes solution is feasible)
 '''
-def getObjVal(indices, c, C, D):
-    objVal = 0
+def getObjVal(N1, c, C, D):
+    N1 = list(N1)
 
-    # add up linear contributions
-    for index in indices:
-        objVal += c[index]
+    # compute overall contributions for lin, quad, and cubic separately
+    linVal = 0
+    quadVal = 0
+    cubicVal = 0
 
-    # add up quadratic contributions
-    for i in range(len(indices)):
-        for j in range(i+1, len(indices)):
-            objVal += C[i,j]
+    # compute contribution for each item in knapsack
+    for i in range(len(N1)):
+        # add linear contribution
+        linVal += c[N1[i]]
 
-            # add up cubic contributions
-            for k in range(j+1, len(indices)):
-                objVal += D[i,j,k]
+        for j in range(i+1, len(N1)):
+            # add up quadratic contributions
+            quadVal += C[N1[i],N1[j]]
 
-    return objVal
+            for k in range(j+1, len(N1)):
+                # add up cubic contributions
+                cubicVal += getDValue(N1[i],N1[j],N1[k],D)
+
+    # print(f"lin val is {linVal}")
+    # print(f"quad val is {quadVal}")
+    # print(f"cubic val is {cubicVal}")
+
+    return linVal+quadVal+cubicVal
 
 
 '''
@@ -107,6 +121,124 @@ def naive_greedy(cubic):
 
         # add item to taken items
         N1.add(take_index)
+
+    # return selected indices
+    return N1
+
+
+'''
+Apply Glover's constructive Greedy heuristic to a single dimension cubic knapsack
+'''
+def naive_greedy_probe(cubic):
+    n = cubic.n
+    c = cubic.c
+    C = cubic.C
+    D = cubic.D
+    a = cubic.a
+    b = cubic.b
+
+    # index set for variables x_i currently set to 1
+    N1 = set()
+    # index set for variables x_i that can feasbily fit
+    N0 = set()
+    # room left in knapsack
+    RHS = b[0]
+
+    # initialize N0 with all item indices whose weight < capacity
+    for i in range(n):
+        if a[i] < RHS:
+            N0.add(i)
+
+    # compute intial value ratios
+    # NOTE: initially only the linear contributions are considered
+    value_ratios = np.zeros(n)
+    for i in N0:
+        value_ratios[i] = c[i] / a[i][0]
+
+    # repeatedly pick the best item until no more items can fit
+    while RHS > 0 and len(N0) > 0:
+        # get the 5 best candidate indices
+        # TODO make 5 into a variable k
+        if len(N0) >= 5:
+            candidates = np.argpartition(value_ratios, -5)[-5:]
+            #print(candidates)
+            combo_evals = {}
+            best_eval = 0
+            best_combo = -1
+            # evaluate each 3-element combination of the cadidates
+            for i in range(len(candidates)):
+                for j in range(i+1, len(candidates)):
+                    for k in range(j+1, len(candidates)):
+                        # first make sure this combination doesn't exceed current capacity
+                        total_weight = a[i][0] + a[j][0] + a[k][0]
+                        if total_weight > RHS:
+                            continue
+                        combination_profit = 0
+                        combination_profit += value_ratios[i]*a[i][0] # CP_i
+                        combination_profit += value_ratios[j]*a[j][0] # CP_j
+                        combination_profit += value_ratios[k]*a[k][0] # CP_k
+                        combination_profit += C[i,j] + C[j,i]
+                        combination_profit += C[i,k] + C[k,i]
+                        combination_profit += C[j,k] + C[k,j]
+                        combination_profit += getDValue(i, j, k, D)
+                        # TODO need to add more cubic vals here considering stuff already taken?
+                        # TODO sometimes eval is a slightly negative num??
+                        combination_profit = combination_profit / total_weight
+                        combo_evals[(i,j,k)] = combination_profit
+                        if combination_profit > best_eval:
+                            best_eval = combination_profit
+                            best_combo = (i,j,k)
+                        # print(f"({candidates[i]},{candidates[j]},{candidates[k]}) : {combination_profit}")
+
+            # print(combo_evals)
+            # print(f"best combo {best_combo}")
+
+            index1_score = 0
+            index2_score = 0
+            index3_score = 0
+
+            for combo in combo_evals:
+                if best_combo[0] in combo:
+                    index1_score += combo_evals[combo]
+                if best_combo[1] in combo:
+                    index2_score += combo_evals[combo]
+                if best_combo[2] in combo:
+                    index3_score += combo_evals[combo]
+
+            if index1_score > index2_score and index1_score > index3_score:
+                take_index = candidates[best_combo[0]]
+            elif index2_score > index1_score and index2_score > index3_score:
+                take_index = candidates[best_combo[1]]
+            else:
+                take_index = candidates[best_combo[2]]
+        else:
+            take_index = np.argmax(value_ratios)
+
+        # remove this item from pool of unassigned items
+        N0.remove(take_index)
+        value_ratios[take_index] = -1
+
+        # update remaining capacity
+        RHS = RHS - a[take_index][0]
+
+        # update N0 (remove items which would put us over capacity if taken)
+        for i in N0.copy():
+            if a[i][0] > RHS:
+                N0.remove(i)
+
+        # update value ratios
+        for i in N0:
+            # add in new quadratic contributions
+            value_ratios[i] += (C[i, take_index] + C[take_index, i])/a[i][0]
+
+        # add in new cubic contributions
+        for j in N1:
+            value_ratios[i] += getDValue(i, j, take_index, D)/a[i][0]
+
+        # add item to taken items
+        N1.add(take_index)
+
+    perform_swaps(N1,N0,cubic)
 
     # return selected indices
     return N1
@@ -246,7 +378,6 @@ class LinkedList:
         return self.size
 
 
-
 '''
 Apply Glover's Advanced constructive Greedy heuristic (with product terms) to a single dimension cubic knapsack
 '''
@@ -308,13 +439,13 @@ def advanced_greedy(cubic, verbose=False):
         # get the highest value item to include next
         take_index = np.argmax(value_ratios)
 
+        # if all items have value_ratio of zero. Just take the first item in N0
+        # otherwise will pick item 0 even if already picked
         if value_ratios[take_index] == 0:
-            N0.display()
             take_index = N0.head.next.index
 
         # remove this item from pool of unassigned items
         N0.remove_by_index(take_index)
-        value_ratios[take_index] = -1
 
         # update remaining capacity
         RHS = RHS - a[take_index][0]
@@ -366,23 +497,205 @@ def advanced_greedy(cubic, verbose=False):
         # add item to taken items
         N1.add(take_index)
 
+    perform_swaps(N1, N0, cubic)
+
     # return selected indices
     return N1
 
 
-def main():
-    n = 60
-    cdmkp = CMDKP(n=n, density=70, constraints=1)
+'''
+Given a feasible solution (perhaps generated by the naive or advaned greedy heuristics),
+perform single element swaps until no more improving swaps can be made
+'''
+def perform_swaps(N1, cubic):
+    n = cubic.n
+    c = cubic.c
+    C = cubic.C
+    D = cubic.D
+    a = cubic.a
+    b = cubic.b
 
-    indices = advanced_greedy(cdmkp)
-    val = getObjVal(indices, cdmkp.c, cdmkp.C, cdmkp.D)
-    print(f"advanced_greedy N1: {indices}")
-    print(f"advanced_greedy obj val: {val}")
+    # helpful to have N1 as a list rather than a set
+    N1 = list(N1)
+
+    # create N0 as the set of variables not in N1 (N - N1)
+    N0 = set()
+    for i in range(n):
+        if i not in N1:
+            N0.add(i)
+
+    # store individual contribution of each item
+    contributions = np.zeros(n)
+
+    # compute initial objective contributions for each item (taken or not)
+    # for vars in N0 this would be the contribution if it were taken right now without removing anything
+    for i in range(n):
+        # add linear contribution
+        contributions[i] += c[i]
+
+        # add pairwise contributions with each item already taken
+        for j in range(len(N1)):
+            if N1[j] > i:
+                contributions[i] += C[i,N1[j]]
+            elif N1[j] < i:
+                contributions[i] += C[N1[j],i]
+
+            # add triplet contributions with each pair already taken
+            for k in range(j+1,len(N1)):
+                contributions[i] += getDValue(i,N1[j],N1[k],D)
+
+
+    # compute initial RHS (remaining capacity in knapsack)
+    RHS = b
+    for item in N1:
+        RHS = RHS - a[item][0]
+
+    # print(f"init RHS: {RHS}")
+    # print(f"total knapsack capacity: {b}")
+    # print(f"item weights (a) = {a}")
+
+    improve = True
+
+    while improve:
+
+        # keep track of best possible improvment so far
+
+        # best pair improvement
+        delta_pq = 0
+        best_pair = (-1,-1)
+
+        # go through each x_i,x_0 pair and compute obj change of potential swap
+        for taken in N1:
+            for untaken in N0:
+                # determine if this pair is feasible
+                # (check if still feasible after swap)
+                if RHS + a[taken][0] - a[untaken][0] < 0:
+                    # making this pair swap is not feasbile, go to the next one
+                    break
+
+                # compute obj change associated with this pair
+                delta_ij = contributions[untaken] - contributions[taken]
+
+                # remove invalid quadratic value
+                if taken > untaken:
+                    delta_ij -= C[untaken,taken]
+                else:
+                    delta_ij -= C[taken,untaken]
+
+                # remove invalid cubic values
+                for k in N1:
+                    if (k == taken): continue
+                    delta_ij -= getDValue(taken, untaken, k, D)
+
+                # update best value
+                if delta_ij > delta_pq:
+                    delta_pq = delta_ij
+                    best_pair = (taken, untaken)
+
+        # now check if any items can be added for free (without a swap)
+        single_delta = 0 # best single elem improvement
+        best_single = -1 # best item to take
+        for item in N0:
+            # if item is worthless, continue to next item
+            if contributions[item] <= 0: continue
+
+            # check if item can fit (without making any swaps). If not, continue
+            if RHS < a[item][0]: continue
+
+            # objChange is simply the contribution of this item
+            # if this is best so far, update
+            if contributions[item] > single_delta:
+                single_delta = contributions[item]
+                best_single = item
+
+        # if we can improve, maybe the relevant updates
+        if delta_pq > 0 or single_delta > 0:
+            # make a swap
+            if delta_pq > single_delta:
+                old_item = best_pair[0]
+                new_item = best_pair[1]
+
+                # remove item that was taken
+                N1.remove(old_item)
+                N0.add(new_item)
+
+                # put in new item
+                N0.remove(new_item)
+                N1.append(new_item)
+
+                # update contributions for all items
+                for i in range(n):
+                    if i < old_item:
+                        contributions[i] -= C[i,old_item]
+                    else:
+                        contributions[i] -= C[old_item,i]
+
+                    if i < new_item:
+                        contributions[i] += C[i,new_item]
+                    else:
+                        contributions[i] += C[new_item,i]
+
+                    for k in range(n):
+                        contributions[i] += getDValue(i,k,new_item,D)
+                        contributions[i] -= getDValue(i,k,new_item,D)
+
+
+                # update RHS
+                RHS -= a[old_item][0] # sub weight of item revomed
+                RHS += a[new_item][0] # add weight of item added
+
+                print(f"Best change is {delta_pq}. Produced by swapping {best_pair}")
+
+            else:
+                # add single item
+                N0.remove(best_single)
+                N1.append(best_single)
+
+                # update contributions for all items
+                for i in range(n):
+                    if i < best_single:
+                        contributions[i] += C[i,best_single]
+                    else:
+                        contributions[i] += C[best_single,i]
+
+                    for k in range(n):
+                        contributions[i] += getDValue(i,k,best_single,D)
+
+                # update RHS
+                RHS -= a[best_single][0]
+
+                print(f"Best change is {single_delta}. Produced by adding {best_single}")
+        else:
+            # no more improvement to be made so exit swapping
+            improve = False
+
+    # return improved solution
+    return N1
+
+
+
+def main():
+    n = 40
+    cdmkp = CMDKP(n=n, density=70, constraints=1)
 
     indices = naive_greedy(cdmkp)
     val = getObjVal(indices, cdmkp.c, cdmkp.C, cdmkp.D)
     print(f"naive_greedy N1: {indices}")
     print(f"naive_greedy obj val: {val}")
+    indices = perform_swaps(indices, cdmkp)
+    val = getObjVal(indices, cdmkp.c, cdmkp.C, cdmkp.D)
+    print(f"naive_greedy N1: {indices}")
+    print(f"naive_greedy obj val: {val}")
+
+    # indices = naive_greedy_probe(cdmkp)
+    # val = getObjVal(indices, cdmkp.c, cdmkp.C, cdmkp.D)
+    # #print(f"naive_greedy with probe N1: {indices}")
+    # print(f"naive_greedy with probe obj val: {val}")
+    #
+    # indices = advanced_greedy(cdmkp)
+    # val = getObjVal(indices, cdmkp.c, cdmkp.C, cdmkp.D)
+    # #print(f"advanced_greedy N1: {indices}")
+    # print(f"advanced_greedy obj val: {val}")
 
 
 if __name__=="__main__":
