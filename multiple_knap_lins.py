@@ -7,34 +7,6 @@ from gurobipy import *
 
 
 '''
-This function returns the value of the D_ijk coefficient by putting the i, j, k in order
-'''
-def getDValue(i, j, k, D):
-
-    # Put i, j, k in order
-    if (i > j):
-        midIndex = i
-        lowIndex = j
-    else:
-        midIndex = j
-        lowIndex = i
-
-    if (midIndex > k):
-        highIndex = midIndex
-        if (lowIndex > k):
-            midIndex = lowIndex
-            lowIndex = k
-        else:
-            midIndex = k
-    else:
-        highIndex = k
-
-    # Return the value of D
-    return D[lowIndex, midIndex, highIndex];
-
-
-
-'''
 Apply the standard linearization to an instance of the cubic multiple knapsack and return the model
 '''
 def standard_lin(cubic):
@@ -76,9 +48,9 @@ def standard_lin(cubic):
     cubic_values = 0
     # add up total obj value across all knapsacks
     for r in range(m):
-        linear_values = quicksum(c[i]*x[i,r] for i in range(n))
-        quad_values = quicksum(C[i][j]*y[i,j,r] for i in range(n-1) for j in range(i+1,n))
-        cubic_values = quicksum(D[i][j][k]*z[i,j,k,r] for i in range(n-2) for j in range(i+1,n-1) for k in range(j+1,n))
+        linear_values += quicksum(c[i]*x[i,r] for i in range(n))
+        quad_values += quicksum(C[i][j]*y[i,j,r] for i in range(n-1) for j in range(i+1,n))
+        cubic_values += quicksum(D[i][j][k]*z[i,j,k,r] for i in range(n-2) for j in range(i+1,n-1) for k in range(j+1,n))
 
     model.setObjective(linear_values+quad_values+cubic_values, sense=GRB.MAXIMIZE)
 
@@ -132,25 +104,14 @@ def adams_and_forrester_lin(cubic):
     g = [[None] * m for i in range(n)]
     for r in range(m):
         for j in range(n):
-            g[j][r] = quicksum((C[i][j]+C[j][i])*x[i,r] for i in range(n))
+            g[j][r] = quicksum(C[i][j]*x[i,r] for i in range(n))
 
     #h = np.zeros((n,n,m))
     h = [[[None] * m for i in range(n)] for j in range(n)]
     for r in range(m):
         for j in range(n):
             for i in range(n):
-                h[i][j][r] = quicksum(getDValue(i,j,k,D)*x[k,r] for k in range(n))
-
-    # g = [[None] * n for r in range(m)]
-    # for r in range(m):
-    #     for j in range(n):
-    #         g[r][j] = quicksum(C[i][j]*x[i,r] for i in range(n) if i!=j)
-
-    # h = [[[None] * n for i in range(n)] for r in range(m)]
-    # for r in range(m):
-    #     for j in range(n):
-    #         for i in range(n):
-    #             h[r][i][j] = quicksum(D[i][j][k]*x[k,r] for k in range(n) if k!=j)
+                h[i][j][r] = quicksum(D[i][j][k]*x[k,r] for k in range(n))
 
     # add constraints
     for r in range(m):
