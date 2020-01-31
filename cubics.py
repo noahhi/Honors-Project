@@ -79,11 +79,15 @@ class CMKP(Cubic):
     self.a = np.random.randint(low=1, high=51, size=n)
     total_weight = sum(self.a)
 
+    # give all knaps the same initial capacity
+    knap_cap = total_weight*0.8/m
+
     # generate knapsack capacities (one for each knapsack)
     self.b = np.zeros(m)
     for j in range(m):
       # TODO should ub be lower than total weight for multiple knap? maybe dependent on m?
-      self.b[j] = np.random.randint(low=50, high=total_weight)
+      # self.b[j] = np.random.randint(low=50, high=total_weight)
+      self.b[j] = knap_cap
 
 
 def main():
