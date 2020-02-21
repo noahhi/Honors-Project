@@ -17,26 +17,40 @@ def naive_greedy(cubic):
     a = cubic.a
     b = cubic.b
 
+    constraints = cubic.constraints
+
     # index set for variables x_i currently set to 1
     N1 = set()
     # index set for variables x_i that can feasbily fit
     N0 = set()
-    # room left in knapsack
-    RHS = b[0]
+    # room left in knapsack (in each dimension)
+    RHS = b
 
-    # initialize N0 with all item indices whose weight < capacity
+    # initialize N0 with all item indices whose weight < capacity (in every dimension)
     for i in range(n):
-        if a[i] < RHS:
+        fits = True
+        for constraint in range(constraints):
+            if a[i][constraint] > RHS[constraint]:
+                fits = False
+        if fits:
             N0.add(i)
 
+    # for multidimensional, compute avg item weight across dimensions
+    avg_weights = np.zeros(n)
+    for i in range(n):
+        total_weight = sum(a[i])
+        avg_weights[i] = total_weight/constraints
+
+    # TODO could intead use highest weight in dimension relative to capacity (intial or updated each time)
+    
+
     # compute intial value ratios
-    # NOTE: initially only the linear contributions are considered
     value_ratios = np.zeros(n)
     for i in N0:
-        value_ratios[i] = c[i] / a[i][0]
+        value_ratios[i] = c[i] / avg_weights[i]
 
     # repeatedly pick the best item until no more items can fit
-    while RHS > 0 and len(N0) > 0:
+    while all(RHS) > 0 and len(N0) > 0:
         # get the highest value item to include next
         take_index = np.argmax(value_ratios)
 
@@ -45,24 +59,30 @@ def naive_greedy(cubic):
         value_ratios[take_index] = -1
 
         # update remaining capacity
-        RHS = RHS - a[take_index][0]
+        for constraint in range(constraints):
+            RHS[constraint] = RHS[constraint] - a[take_index][constraint]
 
         # update N0 (remove items which would put us over capacity if taken)
         for i in N0.copy():
-            if a[i][0] > RHS:
+            fits = True
+            for constraint in range(constraints):
+                if a[i][constraint] > RHS[constraint]:
+                    fits = False
+            if not fits:
                 N0.remove(i)
 
         # update value ratios
         for i in N0:
             # add in new quadratic contributions
-            value_ratios[i] += (C[i, take_index] + C[take_index, i])/a[i][0]
+            value_ratios[i] += (C[i, take_index] + C[take_index, i])/avg_weights[i]
 
         # add in new cubic contributions
         for j in N1:
-            value_ratios[i] += getDValue(i, j, take_index, D)/a[i][0]
+            value_ratios[i] += getDValue(i, j, take_index, D)/avg_weights[i]
 
         # add item to taken items
         N1.add(take_index)
+        print(RHS)
 
     # return selected indices
     return N1
@@ -439,7 +459,6 @@ def advanced_greedy(cubic, verbose=False):
         # add item to taken items
         N1.add(take_index)
 
-    perform_swaps(N1, N0, cubic)
 
     # return selected indices
     return N1
@@ -447,23 +466,40 @@ def advanced_greedy(cubic, verbose=False):
 
 def main():
     n = 15
-    cdmkp = CMDKP(n=n, density=70, constraints=1)
+    cdmkp = CMDKP(n=n, density=100, constraints=4)
 
-    # model and solve using the Adams+Forrester linearization
-    model1 = standard_lin(cdmkp)
-    model1.optimize()
-    print('Optimal sol found by linearization : ' + str(model1.objVal))
-    for i in range(n):
-        print(model1.getVarByName("binary_var["+str(i)+"]"))
+
+    # # # model and solve using the Adams+Forrester linearization
+    # model1 = standard_lin(cdmkp)
+    # model1.optimize()
+    # #
+    # # print()
+    # # print()
+    # # print("-----------------------")
+    # # print()
+    # # print()
+    # #
+    # print('Optimal sol found by linearization : ' + str(model1.objVal))
+    # for i in range(n):
+    #     print(model1.getVarByName("binary_var["+str(i)+"]"))
 
     indices = naive_greedy(cdmkp)
+    return
     val = getObjVal(indices, cdmkp.c, cdmkp.C, cdmkp.D)
     #print(f"naive_greedy N1: {indices}")
     print(f"naive_greedy obj val: {val}")
-    indices = perform_swaps(indices, cdmkp)
-    val = getObjVal(indices, cdmkp.c, cdmkp.C, cdmkp.D)
-    print(f"new solution: {indices}")
-    print(f"new obj val: {val}")
+    # indices = perform_swaps(indices, cdmkp)
+    # val = getObjVal(indices, cdmkp.c, cdmkp.C, cdmkp.D)
+    # #print(f"new solution: {indices}")
+    # print(f"new obj val (after swapping): {val}")
+    #
+    # indices = advanced_greedy(cdmkp)
+    # val = getObjVal(indices, cdmkp.c, cdmkp.C, cdmkp.D)
+    # print(f"advanced greedy obj val: {val}")
+    #
+    # indices = perform_swaps(indices, cdmkp)
+    # val = getObjVal(indices, cdmkp.c, cdmkp.C, cdmkp.D)
+    # print(f"new obj val (after swapping): {val}")
 
 
     # a = cdmkp.a
