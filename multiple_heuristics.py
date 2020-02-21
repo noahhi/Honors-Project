@@ -24,7 +24,8 @@ Params:
     knap_selection_options: a number, 1-4, which specifies which criterion to use
     force_cycles: Specifies whether or not to enfore cyclical knapsack selection
 '''
-def multiple_knap(cubic, knap_selection_option=4, force_cycles=True, oscillation_levels=[0.25,0.5,0.75,1.0], verbose=True):
+def multiple_knap(cubic, knap_selection_option=4, force_cycles=True, oscillation_levels=[0.25,0.5,0.75,1.0],
+                    verbose=True, hovering=False):
     n = cubic.n
     c = cubic.c
     C = cubic.C
@@ -64,9 +65,11 @@ def multiple_knap(cubic, knap_selection_option=4, force_cycles=True, oscillation
         temp_active = activeK.copy()
 
     # initialize hover levels for each knapsack
-    hover_levels = np.zeroes(m)
+    if hovering:
+        hover_levels = np.zeroes(m)
 
     while len(activeK) > 0:
+
         # apply knapsack choice selection rule for selecting knapsack k*
         knapsack_choice = -1
 
@@ -74,7 +77,6 @@ def multiple_knap(cubic, knap_selection_option=4, force_cycles=True, oscillation
             if len(temp_active) <= 0:
                 # finished a cycle. Reset choices
                 temp_active = activeK.copy()
-
             pool = temp_active
         else:
             pool = activeK
@@ -114,6 +116,9 @@ def multiple_knap(cubic, knap_selection_option=4, force_cycles=True, oscillation
                     #print(f'new max diff is {max_diff} : knapsack {k}')
                     knapsack_choice = k
 
+        else:
+            raise ValueError(f"{knap_selection_option} is not a valid knapsack selection option")
+
         if force_cycles:
             # prevent picking this knap again until a full cycle is done
             temp_active.remove(knapsack_choice)
@@ -143,26 +148,29 @@ def multiple_knap(cubic, knap_selection_option=4, force_cycles=True, oscillation
             # remove knapsack from activeK if no more items can be fit
             if len(N0[k]) == 0:
                 activeK.remove(k)
+                if force_cycles:
+                    if k in temp_active:
+                        temp_active.remove(k)
 
         ### Hover Oscillation ###
+        if hovering:
+            # calculate how full the knapsack is
+            percent_full = (b[m]-RHS[knapsack_choice])/b[m]
+            print(f"knapsack {knapsack_choice} is currently at {percent_full}% capacity")
 
-        # calculate how full the knapsack is
-        percent_full = (b[m]-RHS[knapsack_choice])/b[m]
-        print(f"knapsack {knapsack_choice} is currently at {percent_full}% capacity")
+            # check if we surpassed the current hover level, if we have, perform local improvement
+            curr_hover_level = hover_levels[knapsack_choice]
+            if curr_hover_level < len(oscillation_levels) and percent_full > oscillation_levels[curr_hover_level]:
+                # perform local improvement for some number of iterations
+                perform_swaps(N1[knapsack_choice], cubic, N0=N0[knapsack_choice],RHS=RHS[knapsack_choice])
 
-        # check if we surpassed the current hover level, if we have, perform local improvement
-        curr_hover_level = hover_levels[knapsack_choice]
-        if curr_hover_level < len(oscillation_levels) and percent_full > oscillation_levels[curr_hover_level]:
-            # perform local improvement for some number of iterations
-            perform_swaps(N1[knapsack_choice], cubic, N0=N0[knapsack_choice],RHS=RHS[knapsack_choice])
+                #NOTE need to return all removed and added items so we can update N1 and N0
 
-            #NOTE need to return all removed and added items so we can update N1 and N0
-
-            # make sure to update N0 for each knapsack (may need to add and/or remove items)
+                # make sure to update N0 for each knapsack (may need to add and/or remove items)
 
 
-            # increment the hover level for this knapsack
-            hover_levels[knapsack_choice]++
+                # increment the hover level for this knapsack
+                hover_levels[knapsack_choice]+= 1
 
 
     return N1
