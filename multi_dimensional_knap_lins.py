@@ -4,7 +4,7 @@ Use linearizations to solve instances of the cubic Multidimensional knapsack to 
 
 from cubics import *
 from gurobipy import *
-
+from timeit import default_timer as timer
 
 '''
 Apply the Adams and Forrester linearization to an instance of the cubic Multidimensional knapsack and return the model
@@ -123,29 +123,33 @@ def main():
     setParam('LogFile',"")
 
 
-    # generate instance of CMDKP
-    n = 15
-    cdmkp = CMDKP(n=n,density=70,constraints=1)
+    for seed in range(5):
 
-    # model and solve using the Adams+Forrester linearization
-    model1 = standard_lin(cdmkp)
-    model1.optimize()
+        # generate instance of CMDKP
+        n=40
+        cdmkp = CMDKP(n=n,density=70,constraints=1,seed=seed)
 
-    # model and solve using the standard linearization
-    model2 = adams_and_forrester_lin(cdmkp)
-    model2.optimize()
+        # model and solve using the standard linearization
+        # start = timer()
+        #
+        # model1 = standard_lin(cdmkp)
+        # model1.optimize()
+        #
+        # end = timer()
+        # time_std = end - start
+        #
+        # print(f'std_lin took {time_std} to solve. soln is {model1.objVal}')
 
-    print()
+        # model and solve using the a+f linearization
+        start = timer()
 
-    print('solution found by model1 (standard_lin) : ' + str(model1.objVal))
-    for i in range(n):
-        print(model1.getVarByName("binary_var["+str(i)+"]"))
+        model2 = adams_and_forrester_lin(cdmkp)
+        model2.optimize()
 
-    print()
+        end = timer()
+        time_af = end - start
 
-    print('solution found by model2 (adams+forr lin) : ' + str(model2.objVal))
-    for i in range(n):
-        print(model2.getVarByName("binary_var["+str(i)+"]"))
+        print(f'(n = {n}) : af_lin took {time_af:6.3f} to solve. soln is {model2.objVal:9.2f}')
 
 
 if __name__=="__main__":
